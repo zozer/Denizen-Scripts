@@ -1,0 +1,360 @@
+ShopCommand:
+  debug: false
+  type: command
+  name: shop
+  script:
+    - define arg <c.args.get[1]||null>
+    - choose %arg%:
+      - case create:
+        - if <c.args.size.is[MORE].than[2]> {
+          - narrate "<red> Too many args, expected <gold>/shop create <&lb>name<&rb>"
+          - queue clear
+          }
+          
+        - define name <c.args.get[2]||null>
+        
+        - if <def[name].is[==].to[null]> {
+          - narrate "<red>You need to provide a shop name"
+          - queue clear
+          }
+        - if <yaml[dStore].contains[%name%]> {
+          - narrate "<red>That shop name is already in use"
+          - queue clear
+          }
+          
+        - yaml set 'id:dStore' '%name%.createdBy:<player.name>'
+        - narrate "<green>Created shop <gold>%name%"
+      - case add:
+        - if <c.args.size.is[MORE].than[5]> {
+          - narrate "<red> Too many args, expected <gold>/shop add <&lb>shop name<&rb> <&lb>item<&rb> <&lb>cost<&rb> (buy<&pipe>sell)"
+          - queue clear
+          }
+        - if <c.args.size.is[LESS].than[4]> {
+          - narrate "<red> Too few args, expected <gold>/shop add <&lb>shop name<&rb> <&lb>item<&rb> <&lb>cost<&rb> (buy<&pipe>sell)"
+          - queue clear
+          }
+          
+        - define shop <c.args.get[2]||null>
+        - define item <c.args.get[3]||null>
+        - define cost <c.args.get[4]||null>
+        - define flag <c.args.get[5]||null>
+        - define flags li@buy|sell|null
+        
+        - if <yaml[dStore].contains[%shop%].not> {
+          - narrate "<red>No such shop by name of <gold>%shop%<red> exists. use <gold>/shop create<red> to create a new shop"
+          - queue clear
+          }
+        - define tempItem <def[item].as_item||null>
+        - if <def[tempItem].is[==].to[null]> {
+          - narrate "<red>you specified an invliad item"
+          - queue clear
+          }
+        - if <def[cost].round.is[==].to[null]> {
+          - narrate "<red>you specified an invliad cost"
+          - queue clear
+          }
+        - if <def[flags].contains[%flag%].not> {
+          - narrate "<red>you specified an invliad flag"
+          - queue clear
+          }
+          
+        - if <def[flag].is[==].to[buy]> || <def[flag].is[==].to[null]> {
+          - yaml set 'id:dStore' '%shop%.buy.%item%:%cost%'
+          - narrate "<green>Added <gold>%item%<green> to shop <gold>%shop%<green> for <gold>$%cost%"
+          }
+        - if <def[flag].is[==].to[sell]> || <def[flag].is[==].to[null]> {
+          - yaml set 'id:dStore' '%shop%.sell.%item%:%cost%'
+          - narrate "<green>Added <gold>%item%<green> to sell shop <gold>%shop%<green> for <gold>$%cost%"
+          }
+          
+        
+      - case delete:
+        - if <c.args.size.is[MORE].than[4]> {
+          - narrate "<red> Too many args, expected <gold>/shop delete <&lb>shop name<&rb> (item) (buy<&pipe>sell)"
+          - queue clear
+          }
+        - if <c.args.size.is[LESS].than[2]> {
+          - narrate "<red> Too few args, expected <gold>/shop delete <&lb>shop name<&rb> (item) (buy<&pipe>sell)"
+          - queue clear
+          }
+          
+        - define shop <c.args.get[2]||null>
+        - define item <c.args.get[3]||null>
+        
+        - if <yaml[dStore].contains[%shop%].not> {
+          - narrate "<red>No such shop by name of <gold>%shop%<red> exists"
+          - queue clear
+          }
+        - if <def[item].is[!=].to[null]> {
+          - define flag <c.args.get[4]||null>
+          - define flags li@buy|sell|null
+          
+          - if <def[flags].contains[%flag%].not> {
+            - narrate "<red>you specified an invliad flag"
+            - queue clear
+            }
+            
+          - define tempItem <def[item].as_item>
+          - if <def[tempItem].is[==].to[null]> {
+            - narrate "<red>you specified an invliad item"
+            - queue clear
+            }
+          - if <def[flag].is[==].to[buy]> || <def[flag].is[==].to[null]> {
+            - yaml set 'id:dStore' '%shop%.buy.%item%:!'
+            - narrate "<green>Deleted <gold>%item%<green> from shop <gold>%shop%<green>"
+          }
+          - if <def[flag].is[==].to[sell]> || <def[flag].is[==].to[null]> {
+            - yaml set 'id:dStore' '%shop%.sell.%item%:!'
+            - narrate "<green>Deleted <gold>%item%<green> from sell shop <gold>%shop%<green>"
+            }          
+          } else {
+          - yaml set 'id:dStore' '%shop%:!'
+          - narrate "<green>Deleted shop <gold>%shop%<green>"
+          }
+      - case assign:
+        - define npc <player.selected_npc||null>
+        - if <def[npc].is[==].to[null]> {
+          - narrate "<red>You need an npc selected to do this command"
+          - queue clear
+          }
+        - if <c.args.size.is[MORE].than[2]> {
+          - narrate "<red> Too many args, expected <gold>/shop assign <&lb>name<&rb>"
+          - queue clear
+          }
+        - define name <c.args.get[2]||null>
+        - if <def[name].is[==].to[null]> {
+          - narrate "<red>You need to provide a shop name"
+          - queue clear
+          }
+          
+        - flag %npc% dStore:%name%
+        - assignment set "script:dMerchant" npc:%npc%
+        - narrate "<green>Assigned shop <gold>%name%<green> to <gold><def[npc].name>"
+      - case list:
+        - if <c.args.size.is[MORE].than[2]> {
+          - narrate "<red> Too many args, expected <gold>/shop list (shop)"
+          - queue clear
+          }
+        
+        - define shop <c.args.get[2]||null>
+        
+        - if <def[shop].is[==].to[null]> {
+          - narrate "<green>Available shops<&co>"
+          - foreach <yaml[dStore].list_keys[]> {
+            - narrate "<green>- %value%"
+            }
+          } else {
+          - if <yaml[dStore].contains[%shop%].not> {
+            - narrate "<red>No such shop by name of <gold>%shop%<red> exists"
+            - queue clear
+            }
+            
+          - narrate "<green>Available items in shop <gold>%shop%<green><&co>"
+          - foreach <yaml[dStore].list_keys[%shop%.buy]||li@> {
+            - narrate "<green>- %value% <&co> <gold> <yaml[dStore].read[%shop%.buy.%value%]||null>"
+            }
+          - narrate "<green>Available items in sell shop <gold>%shop%<green><&co>"
+          - foreach <yaml[dStore].list_keys[%shop%.sell]||li@> {
+            - narrate "<green>- %value% <&co> <gold> <yaml[dStore].read[%shop%.sell.%value%]||null>"
+            }             
+          }
+      - case reload:
+        - run reloadYAML 'def:dStore|dMerchant/Merchants.yml'
+        - narrate "<green>Reloaded Scripts"
+      - case chat:
+        - inject locally ShopChatCommand
+      - case help:
+        - inject locally help
+        - queue clear
+      - default:
+        - inject locally help
+        - queue clear
+    - run saveYAML 'def:dStore|dMerchant/Merchants.yml'
+  ShopChatCommand:
+    - define argsChat <c.args.remove[1]>
+    - define argChat <def[argsChat].get[1]||null>
+    - choose %argChat%:
+      - case add:
+        - if <def[argsChat].size.is[LESS].than[3]> {
+          - narrate "<red> Too few args, expected <gold>/shop chat add <&lb>shop name<&rb> <&lb>message<&rb>"
+          - queue clear
+          }
+          
+        - define shop <def[argsChat].get[2]>
+        - define message <def[argsChat].remove[1|2].space_separated>
+        
+        - if <yaml[dStore].contains[%shop%].not> {
+          - narrate "<red>No such shop by name of <gold>%shop%<red> exists. use <gold>/shop create<red> to create a new shop"
+          - queue clear
+          }
+        
+        - yaml set 'id:dStore' '%shop%.enter:->:%message%'
+        - narrate "<green>Added <gold>%message%<green> to greeting messages for shop <gold>%shop%"
+        
+      - case delete:
+        - if <def[argsChat].size.is[MORE].than[3]> {
+          - narrate "<red> Too many args, expected <gold>/shop chat delete <&lb>shop name<&rb> <&lb>index<&pipe>all<&rb>"
+          - queue clear
+          }
+        - if <def[argsChat].size.is[LESS].than[3]> {
+          - narrate "<red> Too few args, expected <gold>/shop chat delete <&lb>shop name<&rb> <&lb>index<&pipe>all<&rb>"
+          - queue clear
+          }
+          
+        - define shop <def[argsChat].get[2]>
+        - define index <def[argsChat].get[3]>
+        
+        - if <yaml[dStore].contains[%shop%].not> {
+          - narrate "<red>No such shop by name of <gold>%shop%<red> exists. use <gold>/shop create<red> to create a new shop"
+          - queue clear
+          }
+        
+        - define chatMessages <yaml[dStore].read[%shop%.enter]||null>
+        - if <def[chatMessages].is[==].to[null]> {
+          - narrate "<red>There are no messages to delete"
+          - queue clear
+          }
+        
+        - if <def[index].is[==].to[all]> {
+          - yaml set 'id:dStore' '%shop%.enter:!'
+          - narrate "<green>Deleted all messages for shop <gold>%shop%"
+          } else {
+          - if <def[index].round.is[==].to[null]> || <def[chatMessages].size.is[LESS].that[%index%]> {
+            - narrate "<red>you specified an invliad index"
+            - queue clear
+            }
+          - if <def[chatMessages].size.is[==].to[1]> {
+            - yaml set 'id:dStore' '%shop%.enter:!'
+            } else {
+            - define message <def[chatMessages].get[%index%]>
+            - yaml set 'id:dStore' '%shop%.enter:<-:%message%'
+            - narrate "<green>Deleted <gold>%message%<green> to greeting messages"
+            }
+          }
+      - case view:
+        - if <def[argsChat].size.is[MORE].than[2]> {
+          - narrate "<red> Too many args, expected <gold>/shop chat view <&lb>shop name<&rb>"
+          - queue clear
+          }
+        - if <def[argsChat].size.is[LESS].than[2]> {
+          - narrate "<red> Too few args, expected <gold>/shop chat view <&lb>shop name<&rb>"
+          - queue clear
+          }
+          
+        - define shop <def[argsChat].get[2]>
+        
+        - if <yaml[dStore].contains[%shop%].not> {
+          - narrate "<red>No such shop by name of <gold>%shop%<red> exists. use <gold>/shop create<red> to create a new shop"
+          - queue clear
+          }
+        
+        - if <yaml[dStore].contains[%shop%.enter].not> {
+          - narrate "<red>There are no messages in this shop. Add some by using <gold>/shop chat add"
+          - queue clear
+          }
+        - narrate "<green>Greeting chats for <gold>%shop%<green><&co>"
+        - foreach <yaml[dStore].read[%shop%.enter]> {
+          - narrate " - <gold>%loop_index%<&co> <green>%value%"
+          }
+        - queue clear
+      - case help:
+        - inject locally helpChat
+        - queue clear
+      - default:
+        - inject locally helpChat
+        - queue clear
+  help:
+    - narrate "<green>---------DMerchant Commands Help------------<green>"
+    - narrate "<gold>/shop create <&lb>name<&rb> <green>Creates a new shop by the name given"
+    - narrate "<gold>/shop add <&lb>shop name<&rb> <&lb>item<&rb> <&lb>cost<&rb> (buy<&pipe>sell) <green>Adds or replaces an item to the shop at that cost"
+    - narrate "<gold>/shop delete <&lb>shop name<&rb> (item) <green>Deletes a shop, or just an item from the shop if specified"
+    - narrate "<gold>/shop assign <&lb>shop name<&rb> <green>Assigns a selected npc to a merchant of the shop specified"
+    - narrate "<gold>/shop list (shop) <green>Lists all the available shops, or all the items of a specified shop"
+    - narrate "<gold>/shop chat <green>Commands for managing shop chats. See <gold>/shop chat help<green> for more details"
+  helpChat:
+    - narrate "<green>---------DMerchant Chat Commands Help------------<green>"
+    - narrate "<gold>/shop chat add <&lb>shop name<&rb> <&lb>message<&rb> <green>Adds a greeting message for the specified Merchant"
+    - narrate "<gold>/shop chat delete <&lb>shop name<&rb> <&lb>index<&pipe>all<&rb> <green>Deletes a specified greeting message"
+    - narrate "<gold>/shop chat view <&lb>shop name<&rb> <green>Assigns a selected npc to a merchant of the shop specified"
+dMerchant:
+  debug: false
+  type: assignment
+  actions:
+    on assignment:
+      - lookclose true <npc> range:7
+      - trigger name:proximity state:true radius:6 cooldown:5
+    on enter proximity:
+      - if <yaml[dStore].contains[<npc.flag[dStore]>.enter]> {
+        - narrate format:MerchantChatFormat <proc[dMerchantEnterMessage].context[<npc.flag[dStore]>]>
+      }
+    on click:
+      - run openShop 'def:<npc.flag[dStore]>' instantly
+openShop:
+  type: task
+  script:
+    - define store %1%
+    - define shopInv <yaml[dStore].list_keys[%store%.buy]>
+    - define shop dShop_%store%
+    - note in@generic[title=<&c>%store%;size=27;] 'as:%shop%'
+    - foreach %shopInv% {
+      - define item <def[value].as_item>[lore=<&5><yaml[dStore].read[%store%.buy.%value%]>]
+      - inventory add 'd:in@%shop%' 'o:%item%'
+      }
+    - inventory open 'd:in@%shop%'
+dMerchantEnterMessage:
+  type: procedure
+  definitions: shop
+  script:
+    - determine <yaml[dStore].read[%shop%.enter].random>
+dShopInventory:
+  debug: false
+  type: world
+  events:
+    on player clicks in inventory:
+      - define name <c.inventory.notable_name>
+      - if <def[name].split[_].get[1].is[!=].to[dShop]> queue clear
+      - define store <c.inventory.notable_name.split[_].get[2]>
+      - if <c.raw_slot.is[LESS].than[28]> {      
+        - if <c.cursor_item.is[!=].to[i@air]> {
+          - define item <c.cursor_item.simple>
+          - define quantity <c.cursor_item.quantity>
+          - define sellList <yaml[dStore].list_keys[%store%.sell]||null>
+          - if <def[sellList].contains[<def[item].replace[i@]>].not> {
+            - narrate "<red>You can not sell this item to the shop do <gold>/shop list %store%<red> to see the list of items you can sell"
+            - determine cancelled
+            }
+          - define cost <yaml[dStore].read[%store%.sell.<def[item].replace[i@]>]>
+          - define finalPrice <def[cost].mul[%quantity%]>
+          - give money quantity:%finalPrice%   
+          - narrate "<green>You sold <gold>%quantity% <def[item].replace[i@]> <green>for <gold>%finalPrice%<&ds>"
+          - wait 1t
+          - take %item% from:<c.inventory> quantity:%quantity%
+          } else {
+          - determine passively cancelled
+          - define item <c.item.simple>
+          - if <def[item].is[==].to[i@air]> queue clear
+          - define quantity '<t[<c.is_shift_click>]:<def[item].max_stack>||1>'
+          - define cost <c.item.lore.get[1].strip_color>
+          - define finalPrice <def[cost].mul[%quantity%]>
+          - if <player.money.is[LESS].than[%finalPrice%]> {
+            - narrate "<red>You do not have enough money for that"
+            - queue clear
+            }
+
+          - narrate "<green>You bought <gold>%quantity% <def[item].replace[i@]><green> for <gold>%finalPrice%<&ds>"
+          - take money quantity:%finalPrice%
+          - give %item% quantity:%quantity%
+          }
+        }
+MerchantChatFormat:
+  type: format
+  format: <gold><&lb><npc.name><&rb><white><&co> <green><text.replace[<&lt>player<&gt>].with[<player.name>]>
+    
+dMerchantSetup:
+  debug: false
+  type: world
+  events:
+    on server start:
+      - run loadYAML 'def:dStore|dMerchant/Merchants.yml'
+    on reload scripts:
+      - run loadYAML 'def:dStore|dMerchant/Merchants.yml'

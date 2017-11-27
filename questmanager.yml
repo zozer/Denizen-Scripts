@@ -1,0 +1,749 @@
+questCommand:
+  type: command
+  name: quest
+  usage: /quest
+  script:
+    - define arg1 <c.args.get[1]||null>
+    - choose %arg1%:
+      - case fix:
+        #/quest fix (npc)
+        - define npc <c.args.get[2].as_npc||<player.selected_npc>>
+        - if <def[npc].is[==].to[null]> {
+          - narrate format:QuestErrorFormat "no npc given or selected"
+          - queue clear
+          }
+        - if <def[npc].has_flag[questBroken].not> {
+          - narrate format:QuestErrorFormat "this npc doesnt need to be fixed"
+          - queue clear
+          }
+        - flag npc questBroken:!
+        - disengage %npc%
+        - narrate "<gold><def[npc].name> <green>has now been flaged as fixed."
+      - case assign:
+        #/quest assign [quest name] (npc)
+        - define quest <c.args.get[2]||null>
+        - if <def[quest].is[==].to[null]> {
+          - narrate format:QuestErrorFormat "no quest given"
+          - queue clear
+          }
+        - if <proc[questExist].context[%quest%].not> {
+          - narrate format:QuestErrorFormat "no such quest exists"
+          - queue clear
+          }
+        - define npc <c.args.get[3].as_npc||<player.selected_npc>>
+        - if <def[npc].is[==].to[null]> {
+          - narrate format:QuestErrorFormat "no npc given or selected"
+          - queue clear
+          }
+        - flag <def[npc]> quest:%quest%   
+        - assignment set "script:questNPC" npc:%npc%
+   
+        - narrate "<gold><def[npc].name> <green>has been assigned quest <gold>%quest%"
+      - case refresh:
+        - run reloadPlayer 'def:<player>'
+      - case reload:
+        - run reloadQuests
+        - narrate "<green>Reloaded quests"
+      - case leave:
+        - define quest <c.args.get[2]||null>
+        - if <def[quest].is[==].to[null]> {
+          - narrate format:QuestErrorFormat "no quest given"
+          - queue clear
+          }
+        - define id 'questlog_<player.uuid>'
+        - if <yaml[%id%].contains[activequests.%quest%].not> {
+          - narrate format:QuestErrorFormat "You do not have this quest active"
+          - queue clear
+          }
+        - yaml id:%id% set activequests.%quest%:!
+        - run savePlayerLog 'def:<player>'
+        - narrate "<green>Left the quest"       
+      - case info:
+        - define id 'questlog_<player.uuid>'
+        - define quest <c.args.get[2]||null>
+        - if <def[quest].is[==].to[null]> {
+          - inject locally questGenericInfo
+          } else if <yaml[%id%].contains[activequests.%quest%]> {
+          - inject locally questSpecificInfo
+          } else {
+          - narrate format:QuestErrorFormat "You do not have this quest active"
+          }
+      - case stats:
+        - define id 'questlog_<player.uuid>'
+        - inject locally questStats
+  questStats:
+    - narrate "<green>######<Gold>Quest Stats<green>######"
+    - foreach <yaml[%id%].list_keys[completed]||li@> {
+      - define quest %value%
+      - narrate "<green><&pipe>  <gold><proc[questName].context[%quest%]><white><&co> <yaml[%id%].read[completed.%quest%.count].round_down>"
+      }
+    - narrate "<green>#####################"
+  questGenericInfo:
+    - narrate "<green>######<Gold>Quest Data<green>######"
+    - foreach <yaml[%id%].list_keys[activequests]||li@> {
+      - define quest %value%
+      - define questMsg "<gold><proc[questName].context[%quest%]><white><&co>"
+      - narrate "<green><&pipe>  <proc[msgCommand].context[%questMsg%|quest info %quest%|click to see more quest details]>"
+      - define type <yaml[%id%].read[activequests.%quest%.type]>
+      - narrate "<green><&pipe>    <blue>type<white><&co> <gold>%type%"
+      - if <def[type].is[==].to[goto]> {
+        - narrate "<green><&pipe>    <blue>location<white><&co> <gold><yaml[%id%].read[activequests.%quest%.objects.location]>"
+        } else {
+        - narrate "<green><&pipe>    <white>progress<&co>"
+        - foreach <yaml[%id%].list_keys[activequests.%quest%.objects]> {
+          - define progress <yaml[%id%].read[activequests.%quest%.objects.%value%]>
+          - define total <yaml[%id%].read[activequests.%quest%.total.%value%]>
+          - narrate "<green><&pipe>      <blue>%value%<white><&co> <def[total].sub[%progress%].round_down>/<def[total].round_down>"
+          }
+        }
+      }
+    - narrate "<green>#####################"
+  questSpecificInfo:
+    - narrate "<green>######<Gold>Quest Data<green>######"
+    - narrate "<green><&pipe><gold><proc[questName].context[%quest%]><white><&co>"
+    - define type <yaml[%id%].read[activequests.%quest%.type]>
+    - narrate "<green><&pipe>  <blue>type<white><&co> <gold>%type%"
+    - narrate "<green><&pipe>  <blue>got from<white><&co> <gold><yaml[%id%].read[activequests.%quest%.gotFrom].as_npc.name||none>"
+    - narrate "<green><&pipe>  <blue>times completed<white><&co> <gold><yaml[%id%].read[completed.%quest%.count].round_down>"
+    - if <def[type].is[==].to[goto]> {
+      - narrate "<green><&pipe>  <blue>location<white><&co> <gold><yaml[%id%].read[activequests.%quest%.objects.location]>"
+      } else {
+      - narrate "<green><&pipe>  <white>progress<&co>"
+      - foreach <yaml[%id%].list_keys[activequests.%quest%.objects]> {
+        - define progress <yaml[%id%].read[activequests.%quest%.objects.%value%]>
+        - define total <yaml[%id%].read[activequests.%quest%.total.%value%]>
+        - narrate "<green><&pipe>    <blue>%value%<white><&co> <def[total].sub[%progress%].round_down>/<def[total].round_down>"
+        }
+      }
+    - narrate "<green>#####################"
+questmanager:
+  type: world
+  events:
+    on server start:
+      - run loadYAML 'def:quests|drpg/quests/quests.yml'
+      - foreach <server.list_players> {
+        - run loadYAML 'def:questlog_<def[value].uuid>|drpg/quests/playerlogs/<def[value].uuid>.yml'
+        }
+    on player joins:
+      - if <server.has_file[drpg/quests/playerlogs/<player.uuid>.yml].not> {
+        - run loadYAML 'def:questlog_<player.uuid>|drpg/quests/playerlogs/<player.uuid>.yml'
+        }
+questEvents:
+  type: world
+  events:
+    on player kills entity:
+      - if <proc[getQuests].context[<player>|kill].size.is[==].to[0]> {
+        - queue clear
+        }
+      - define id 'questlog_<player.uuid>'
+      - foreach <proc[getQuests].context[<player>|kill]> {
+        - define quest %value%
+        - define objects <yaml[%id%].list_keys[activequests.%quest%.objects]>
+        - foreach %objects% {
+          - if <c.entity.entity_type.to_lowercase.is[==].to[%value%]> || <c.entity.name.to_lowercase.is[==].to[%value%]||false> {
+            - if <yaml[%id%].read[activequests.%quest%.objects.%value%].is[==].to[0]> foreach stop
+            - yaml id:%id% set activequests.%quest%.objects.%value%:-:1
+            - if <proc[questIsFinished].context[<player>|%quest%]> {
+              - run complete_quest 'def:<player>|%quest%' instantly
+              }
+            - run savePlayerLog 'def:<player>'
+            - foreach stop
+            }
+          }
+        }
+    on player picks up item:
+      - if <proc[getQuests].context[<player>|gather].size.is[==].to[0]> {
+        - queue clear
+        }
+      - run locally updateGatherQuest 'def:<player>|<c.item>|true|true' instantly
+    on player drops item:
+      - if <proc[getQuests].context[<player>|gather].size.is[==].to[0]> {
+        - queue clear
+        }
+      - run locally updateGatherQuest 'def:<player>|<c.item>|false' instantly
+    on player opens inventory:
+      - if <proc[getQuests].context[<player>|gather].size.is[==].to[0]> {
+        - queue clear
+      }
+      - flag player QM_TEMP_INV:<player.inventory.list_contents>
+    on player closes inventory:
+      - if <proc[getQuests].context[<player>|gather].size.is[==].to[0]> {
+        - queue clear
+        }
+      - if <c.inventory.is[==].to[<player.inventory>]> queue clear
+      - define addedList <player.inventory.list_contents>
+      - define removedList li@
+      
+      - foreach <player.flag[QM_TEMP_INV].get[1]> {
+        - define foundItem <def[addedList].find[%value%]>
+        - if <def[foundItem].is[==].to[-1]> {
+          - define removedList <def[removedList].include[%value%]>
+          } else {
+          - define addedList <def[addedList].remove[%foundItem%]>
+          }
+        }
+      - define addedList <def[addedList].exclude[i@air]>
+      - define removedList <def[removedList].exclude[i@air].exclude[%addedList%]>
+      
+      - foreach %addedList% {
+        - run locally updateGatherQuest 'def:<player>|%value%|true' instantly
+        }
+      
+      - foreach %removedList% {
+        - run locally updateGatherQuest 'def:<player>|%value%|false' instantly
+        }
+   
+    on player enters notable cuboid:
+      - define activeQuests <proc[getQuests].context[<player>|goto]>
+      - if <def[activeQuests].size.is[==].to[0]> {
+        - queue clear
+        }
+      - define cuboidList <c.cuboids.filter[notable_name.starts_with[QuestCuboid]]>
+      - define id 'questlog_<player.uuid>'
+      
+      - foreach %cuboidList% {
+        - define cuboid %value%
+        - define quest <def[cuboid].notable_name.split[_].remove[1].separated_by[_]>
+        - if <yaml[%id%].contains[activeQuests.%quest%]> {
+          - run complete_quest 'def:<player>|%quest%' instantly
+          }
+        }
+  updateGatherQuest:
+    - define player %1%
+    - define item <def[2].simple.after[i@].to_lowercase>
+    - define checkComplete <def[3]||true>
+    - define updateInv <def[4]||false>
+    - define activeQuests <proc[getQuests].context[%player%|gather]> 
+    - define id 'questlog_<player.uuid>'
+    - foreach %activeQuests% {
+      - if <yaml[%id%].contains[activequests.%value%.objects.%item%]||false> {
+        - define itemQuantity <proc[getQuantityInInventory].context[<player.inventory>|%item%]>
+        - if %updateInv% {
+          - define itemQuantity <def[itemQuantity].add[<def[2].quantity>]>
+          }
+        - yaml id:%id% set activequests.%value%.objects.%item%:<yaml[%id%].read[activeQuests.%value%.total.%item%].sub[%itemQuantity%].max[0]>
+        - if <def[checkComplete].not> && <proc[questIsFinished].context[%player%|%value%].not.and[<yaml[%id%].contains[pendingcompleted.%value%]>]> {
+          - yaml id:%id% set pendingcompleted.%value%:!
+          }
+        - if <def[checkComplete]> && <proc[questIsFinished].context[<player>|%value%].and[<yaml[%id%].contains[pendingcompleted.%value%].not>]> {
+          - run complete_quest 'def:<player>|%value%' instantly
+          } 
+        - run savePlayerLog 'def:%player%
+        - foreach stop
+        }
+      }     
+start_quest:
+  type: task
+  script:
+    - define player %1%
+    - define quest %2%
+    - define gotFrom %3%
+    - define id 'questlog_<def[player].uuid>'
+    - if <proc[questPlayerConflict].context[%player%|%quest%]> {
+      - yaml id:%id% set inactivequests.%quest%.gotfrom:%gotFrom%
+      - run savePlayerLog 'def:%player%'
+      - narrate "<red>This quest has been made inactive due to conflicting requirements with another quest"
+      - narrate "<red>This quest will start automatically as soon the conflicting quests are completed"
+      - queue clear
+      }
+    - title "title:<green>Quest Started" "subtitle:<proc[questName].context[%quest%]>" targets:%player%
+    - define playerPath 'drpg/quests/playerlogs/<def[player].uuid>.yml'
+
+    - foreach <yaml[quests].list_keys[quests.%quest%.objects]> {
+      - yaml id:%id% set activequests.%quest%.objects.%value%:<yaml[quests].read[quests.%quest%.objects.%value%]>
+      - if <yaml[quests].read[quests.%quest%.type].is[!=].to[goto]> {
+        - yaml id:%id% set activequests.%quest%.total.%value%:<yaml[quests].read[quests.%quest%.objects.%value%]>
+        }
+      }
+    - yaml id:%id% set activequests.%quest%.gotfrom:%gotFrom%
+    - yaml id:%id% set activequests.%quest%.type:<yaml[quests].read[quests.%quest%.type]>
+    - run savePlayerLog 'def:%player%'
+
+complete_quest:
+  type: task
+  script:
+    - define player %1%
+    - define quest %2%
+    - define id 'questlog_<def[player].uuid>'
+    - define questPath 'drpg/quests/quests.yml'
+    - define questYamlPath 'quests.%quest%'
+    - define playerPath 'drpg/quests/playerlogs/<def[player].uuid>.yml'
+    - if <yaml[quests].read[%questYamlPath%.return]||false> {
+      - define return <yaml[%id%].read[activequests.%quest%.gotfrom]>
+      - yaml id:%id% set pendingcompleted.%quest%.return:%return%
+      - title "title:<green>Quest Objectives Completed" "subtitle:<proc[questName].context[%quest%]><&co> return to <def[return].name>" targets:%player%
+      - if <yaml[%id%].read[activequests.%quest%.type].is[!=].to[gather]> {
+        - yaml id:%id% set activequests.%quest%:!
+        }
+      } else {
+      - yaml id:%id% set completed.%quest%.count:+:1
+      - title "title:<green>Quest Completed" "subtitle:%quest%" targets:%player%
+      - run rewardPlayer 'def:%player%|%quest%' instantly
+      - yaml id:%id% set activequests.%quest%:!
+      }
+    - run savePlayerLog 'def:%player%'
+rewardPlayer:
+  type: task
+  debug: false
+  script:
+    - define player %1%
+    - define quest %2%
+    - define id 'questlog_<def[player].uuid>'
+    - define questPath 'drpg/quests/quests.yml'
+    - define questYamlPath 'quests.%quest%'
+    - define playerPath 'drpg/quests/playerlogs/<def[player].uuid>.yml'
+    - define questAutoStart null
+    
+    - if <yaml[quests].read[quests.%quest%.type].is[==].to[gather]> {
+      - foreach <yaml[%id%].list_keys[activequests.%quest%.total]> {
+        - take %value% quantity:<yaml[%id%].read[activequests.%quest%.total.%value%]> from:<def[player].inventory>
+        }
+      - yaml id:%id% set activequests.%quest%:!
+      }
+    - foreach <yaml[quests].list_keys[quests.%quest%.reward]> {
+      - define qty <yaml[quests].read[quests.%quest%.reward.%value%]>
+      - if <def[value].is[==].to[drpg_xp]> {
+        - flag <def[player]> drpg_xp:+:%qty%
+        - narrate "<green>You recieved <gold>+%qty% XP"
+        } else if <def[value].is[==].to[auto_start]> {
+        - define questAutoStart %qty%
+        } else {
+        - if <def[value].is[==].to[gold]> define value gold_nugget
+        - give %value% quantity:%qty%
+        - if <def[value].is[==].to[money]> {
+          - narrate "<green>You recieved <gold>$%qty%"
+          } else if <def[value].as_item.script.is[!=].to[null]||false> {
+          - narrate "<green>You recieved %qty% <def[value].as_item.display>"
+          } else {
+          - narrate "<green>You recieved %qty% %value%"
+          }
+        }
+      }
+    - run questAttemptMakeActive 'def:%player%'
+    - if <def[questAutoStart].is[!=].to[null]> {
+      - run start_quest 'def:<def[player]>|<def[questAutoStart]>|null>' instantly
+      }
+questAttemptMakeActive:
+  type: task
+  script:
+    - define player %1%
+    - define id 'questlog_<def[player].uuid>'
+    - foreach <yaml[%id%].list_keys[inactivequests]||li@> {
+      - if <proc[questPlayerConflict].context[%player%|%quest%].not> {
+        - define gotFrom <yaml[%id%].read[inactivequests.%quest%.gotfrom]>
+        - run start_quest 'def:%player%|%quest%|%gotFrom%'
+        - yaml id:%id% set inactivequests.%quest%:!
+        - run savePlayerLog 'def:%player%'
+        }
+      }
+loadQuestRegions:
+  type: task
+  script:
+    - foreach <yaml[quests].list_keys[quests]> {
+      - define quest %value%
+      - if <yaml[quests].read[quests.%quest%.type].is[==].to[goto]> {
+        - narrate %quest%
+        - define center l@<yaml[quests].read[quests.%quest%.objects.location]>
+        - define corner1 <def[center].add[2,0,2]>
+        - define corner2 <def[center].add[-2,0,-2]>
+        - note cu@%corner1%|%corner2% as:QuestCuboid_%quest%
+        }
+      }
+reloadQuests:
+  type: task
+  script:
+    - yaml unload id:quests
+    - run loadYAML 'def:quests|drpg/quests/quests.yml'
+reloadPlayer:
+  type: task
+  script:
+    - define player %1%
+    - define id 'questlog_<def[player].uuid>'
+    - yaml unload id:%id%
+    - run loadYAML 'def:%id%|drpg/quests/playerlogs/<def[player].uuid>.yml'
+saveQuestFile:
+  type: task
+  script:
+    - run saveYAML 'def:quests|drpg/quests/quests.yml' 
+savePlayerLog:
+  type: task
+  script:
+    - define player %1%
+    - define id 'questlog_<def[player].uuid>'
+    - run saveYAML 'def:%id%|drpg/quests/playerlogs/<def[player].uuid>.yml'
+getQuests:
+  type: procedure
+  definitions: player|type
+  script:
+    - define id 'questlog_<def[player].uuid>'
+    - if <def[type].is[==].to[null]||true> {
+      - define activeQuests <yaml[%id%].list_keys[activequests]||li@>
+      - define inactiveQuests <yaml[%id%].list_keys[inactivequests]||li@>
+      - determine <def[activeQuests].include[%inactiveQuests%]>
+      } else {
+      - define returnList li@
+      - foreach <yaml[%id%].list_keys[activequests]||li@> {
+        - if <yaml[%id%].read[activequests.%value%.type].is[==].to[%type%]||false> {
+          - define returnList <def[returnList].include[%value%]>
+          }
+        }
+      - determine %returnList%
+      }
+getQuestFrom:
+  type: procedure
+  definitions: player|npc|status
+  script:
+    - define id 'questlog_<def[player].uuid>'
+    - define status <def[status]||active>
+    - choose %status%:
+      - case active:
+        - foreach <yaml[%id%].list_keys[activequests]> {
+          - if <def[npc].is[==].to[<yaml[%id%].read[activequests.%value%.gotfrom]>]> {
+            - determine %value%
+            }
+          }
+        - determine null
+      - case inactive:
+        - foreach <yaml[%id%].list_keys[inactivequests]> {
+          - if <def[npc].is[==].to[<yaml[%id%].read[inactivequests.%value%.gotfrom]>]> {
+            - determine %value%
+            }
+          }
+        - determine null
+      - case pending:
+        - foreach <yaml[%id%].list_keys[pendingcompleted]> {
+          - if <def[npc].is[==].to[<yaml[%id%].read[pendingcompleted.%value%.return]>]> {
+            - determine %value%
+            }
+          }
+        - determine null
+getQuantityInInventory:
+  type: procedure
+  definitions: inventory|item
+  script:
+    - define total 0
+    - foreach <def[inventory].list_contents.exclude[i@air].filter[simple.after[i@].is[==].to[%item%]]> {
+      - define total <def[total].add[<def[value].quantity>]>
+      }
+    - determine %total%
+getQuestType:
+  type: procedure
+  definitions: quest
+  script:
+    - determine <yaml[quests].read[quests.%quest%.type]||null>
+questExist:
+  type: procedure
+  definitions: quest
+  script:
+    - determine <yaml[quests].contains[quests.%quest%]>
+questConflict:
+  type: procedure
+  definitions: quest1|quest2
+  script:
+    - if <proc[getQuestType].context[%quest1%]> != <proc[getQuestType].context[%quest2%]> {
+      - determine false
+      }
+    - if <proc[getQuestType].context[%quest1%]> == goto {
+      - determine false
+      }
+    - foreach <yaml[quests].list_keys[quests.%quest1%.objects]> {
+      - if <yaml[quests].contains[quests.%quest2%.objects.%value%]> {
+        - determine true
+        }
+      }
+    - determine false
+questPlayerConflict:
+  type: procedure
+  definitions: player|quest
+  script:
+    - define id 'questlog_<def[player].uuid>'
+    - foreach <yaml[%id%].list_keys[activequests]> {
+      - if <proc[questConflict].context[%quest%|%value%]> {
+        - determine true
+        }
+      }
+    - determine false
+questIsFinished:
+  type: procedure
+  definitions: player|quest
+  script:
+    - define id questlog_<def[player].uuid>
+    - define yamlPath 'activequests.%quest%.objects'
+    - foreach <yaml[%id%].list_keys[%yamlPath%]> {
+      - if <yaml[%id%].read[%yamlPath%.%value%].is[MORE].than[0]> {
+        - determine false
+        }
+      }
+    - determine true
+questName:
+  type: procedure
+  definitions: quest
+  script:
+    - if <proc[questExist].context[%quest%].not> {
+      - determine null
+      }
+    - determine <yaml[quests].read[quests.%quest%.name]||%quest%>      
+questNPC:
+  type: assignment
+  default constants:
+    enter: "Click on me to start <proc[questName].context[<npc.flag[quest]>]>"
+    early_leave: "Wait... where are you? ... never mind..."
+    reward: "Thank You, here is your reward"
+    current: "You already have my quest started.."
+  actions:
+    on assignment:
+      - trigger name:proximity state:true radius:7 cooldown:5
+      - trigger name:click state:true radius:7
+      - trigger name:chat state:true radius:7
+      - lookclose true <npc> range:7
+      - flag npc 'questChatPath:quests.<npc.flag[quest]>.trigger.chat'
+    on unavailable:
+      - if <npc.has_flag[questBroken]> {
+        - narrate format:QuestNpcChatFormat "<red>This NPC is broken, an admin will fix him soon"
+        - queue clear
+        }
+    on enter proximity:
+      - if <npc.has_flag[questBroken]> {
+        - queue clear
+        }
+      - if <player.has_flag[questSetUp].not> || <player.flag[questSetUp].is[!=].to[<npc.flag[quest]>]> {
+        - define chatEvent 'enter'
+        - inject locally EventChat instantly
+        }
+    on exit proximity:
+      - if <player.has_flag[questSetUp].and[<player.flag[questSetUp].is[==].to[<npc.flag[quest]>]>]> {
+        - define chatEvent 'early_leave'
+        - inject locally EventChat
+        - inject locally ExitChat
+        }
+    on click:
+      - if <npc.has_flag[questBroken]> {
+        - narrate format:QuestNpcChatFormat "<red>This NPC is broken, an admin will fix him soon"
+        - queue clear
+        }
+      - if <player.flag[questSetUp].is[==].to[<npc.flag[quest]>]||false> {
+        - queue clear
+        }
+      #if the quest is completed
+      - define quest <proc[getQuestFrom].context[<player>|<npc>|pending]>
+      - if <def[quest].is[!=].to[null]> {
+        - define chatEvent 'reward'
+        - inject locally EventChat
+        - run rewardPlayer 'def:<player>|%quest%' instantly
+        - define id 'questlog_<player.uuid>'
+        - yaml id:%id% set completed.%quest%.count:+:1
+        - yaml id:%id% set pendingcompleted.%quest%:!
+        - run savePlayerLog 'def:<player>'
+        - queue clear
+        }
+      #if the quest is currently active and the quest does not have the ignore tag
+      - if <proc[getQuestFrom].context[<player>|<npc>|active].is[!=].to[null]> && <yaml[quests].read[quests.<npc.flag[quest]>.ignore_current].not||true> {
+        - define chatEvent 'current'
+        - inject locally EventChat
+        - queue clear
+        }
+      #start chat sequence
+      - flag player questSetUp:<npc.flag[quest]>
+      - inject locally StartChatSequence
+    on chat:
+      - if <player.has_flag[questSetUp].not> queue clear
+      - determine passively cancelled
+      - define answerPath <t[<player.has_flag[QM_TEMP_ANS]>]:-<player.flag[QM_TEMP_ANS].as_list.separated_by[-]>-||->
+      - define possibleAnswers <yaml[quests].read[<npc.flag[questChatPath]>.<player.flag[questInChatStep].round_down>%answerPath%a].as_list>
+      - define answer <c.message>
+      - if <def[possibleAnswers].get_sub_items[1].contains[%answer%].not> {
+        - narrate format:QuestErrorFormat "%answer% is not a valid choice"
+        - queue clear
+        }
+      - define responce <def[possibleAnswers].map_get[%answer%]>
+      - narrate format:QuestPlayerChatFormat %responce%
+      - flag player QM_TEMP_ANS:->:%answer%
+      - inject locally StartChatSequence
+
+  StartChatSequence:
+    - while <player.has_flag[questSetUp]> {
+      - flag player questInChatStep:+:1
+      - define nextchatnumber '<player.flag[questInChatStep].round_down>'
+      - define answer <player.flag[QM_TEMP_ANS].as_list.separated_by[-]>
+      - if <def[answer].is[!=].to[null]||false> {
+        - define nextchatnumber %nextchatnumber%-%answer%
+        }
+      - define nextchat <yaml[quests].read[<npc.flag[questChatPath]>.%nextchatnumber%]||null>
+        
+      - if <def[nextchat].is[==].to[null]> {
+        - narrate format:QuestErrorFormat "The chat sequence is missing beyond this point, please contanct an admin immediately so that they can fix this. Unknown path <gold>%nextchatnumber%"
+        - inject locally ExitChat
+        - flag npc questBroken
+        - engage
+        - queue clear
+        }
+      - define toChat <def[nextchat].split[/].get[1].trim||null>
+      - define command <def[nextchat].split[/].get[2].trim||null>
+      - if <def[toChat].length.is[MORE].than[0]> && <def[toChat].is[!=].to[<&lt>null<&gt>]> {
+        - wait 10t
+        - narrate format:QuestNpcChatFormat %toChat%
+        }
+      - if <def[command].starts_with[cond]> {
+        - define condition <def[command].split[?].get[1]>
+        - define command <def[command].split[?].get[2].trim||null>
+        - inject locally ConditionCommand
+        - if <player.has_flag[questInChatStep].not> {
+          - while stop
+          }
+        } else if <def[command].is[!=].to[null]> {
+        - inject locally SubCommand
+        }
+      - define responceChat <yaml[quests].read[<npc.flag[questChatPath]>.%nextchatnumber%-a]||null>
+      - if <def[responceChat].is[!=].to[null]> {
+        - foreach <def[responceChat].as_list.get_sub_items[1]> {
+          - wait 1t
+          - define message "<gray>%value%<white><&co> <def[responceChat].as_list.map_get[%value%]>"
+          - narrate "<proc[msgChat].context[%message%|%value%|Type <gold>%value% <white>to answer <gold><def[responceChat].as_list.map_get[%value%]><white>]>"
+          }
+        - while stop
+        }
+      }
+  ConditionCommand:
+    - define args <def[condition].split[<&sp>].remove[1]>
+    - define condCommand <def[command].split[<&pipe>].get[1]>
+    - define elseCommand <def[command].split[<&pipe>].get[2]||null>
+    - define condMet false
+    - define id 'questlog_<player.uuid>'
+    - choose <def[args].get[1]>:
+      - case completed:
+        - define times 1
+        - define quest <npc.flag[quest]>
+        - if <def[args].size.is[==].to[2]> {
+          - if <def[args].get[2].is[MATCHES].to[number]||false> {
+            - define times <def[args].get[2]>
+            } else {
+            - define quest <def[args].get[2]>
+            }
+          }
+        - if <def[args].size.is[==].to[3]> {
+          - define times <def[args].get[3]>
+          }
+
+        - define timesCompleted <yaml[%id%].read[completed.%quest%.count]||0>
+        - define condMet <def[timesCompleted].is[OR_MORE].than[%times%]>
+      - case current:
+        - define quest <def[args].get[2]||<npc.flag[quest]>>
+        - define condMet <proc[getQuests].context[<player>].contains[%quest%]>
+      - case flagged:
+        - define flag <def[args].get[2]>
+        - define condMet <player.has_flag[%flag%]>
+      - case flag:
+        - define flag <def[args].get[2]>
+        - define compare <def[args].get[3]>
+        - define value <def[args].get[4]>
+        - if <compare.is[==].to[==]> || <compare.to_upper.is[==].to[EQUALS]> {
+          - define condMet <player.flag[%flag%].is[==].to[%value%]>
+          } else {
+          - define condMet <player.flag[%flag%].is[%compare%].than[%value%]>
+          }
+      - case level:
+        - define level <def[args].get[2]>
+        - define condMet <def[level].is[OR_MORE].than[<player.flag[drpg_level]>]>
+    - define condMet <def[condition].starts_with[cond!].xor[%condMet%]>
+    - define command <t[%condMet%]:%condCommand%||%elseCommand%>
+    - if <def[command].is[!=].to[null]> {
+      - inject locally SubCommand
+      }
+      
+  SubCommand:
+    - define args <def[command].split[<&sp>]>
+    - choose <def[args].get[1]>:
+      - case goto:
+        - define gotoStep <def[args].get[2]>
+        - define back <def[args].get[3].is[==].to[back]||false>
+        - if %back% {
+          - define steps <def[args].get[4]||all>
+          - if <def[steps].is[==].to[all]> {
+            - flag player QM_TEMP_ANS:!
+            } else {
+            - repeat %steps% {
+              - flag player QM_TEMP_ANS:<-:<player.flag[QM_TEMP_ANS].as_list.last>
+              }
+            }
+          }         
+        - flag player questInChatStep:<def[gotoStep].sub[1]>
+        - while next
+      - case back:
+        - define steps <def[args].get[2]||all>
+        - if <def[steps].is[==].to[all]> {
+          - flag player QM_TEMP_ANS:!
+          }
+      - case shop:
+        - if <server.list_scripts.contains[s@dMerchant].not> {
+          - narrate format:QuestErrorFormat "This feature requires the dMerchant plugin to be installed"
+          - inject locally ExitChat
+          - queue clear
+          }
+        - define store <def[args].get[2]>
+        - inject locally ExitChat
+        - run openShop 'def:%store%' instantly
+      - case flag:
+        - define flag <def[args].get[2]>
+        - define value <def[args].get[3]||true>
+        - flag player %flag%:%value%
+      - case execute:
+        - define exeCommand <def[args].remove[1].space_separated>
+        - execute as_server %exeCommand% silent
+      - case start:
+        - define quest <def[args].get[2]||<npc.flag[quest]>>
+        - run start_quest 'def:<player>|%quest%|<npc>' instantly
+        - inject locally ExitChat   
+      - case end:
+        - inject locally ExitChat
+  EventChat:
+    - define returnChat <yaml[quests].read[<npc.flag[questChatPath]>.%chatEvent%].as_list.random||<npc.script.constant[%chatEvent%]>>
+    - if <def[returnChat].substring[1,1].is[==].to[<&lt>]> && <def[returnChat].substring[<def[returnChat].length>,<def[returnChat].length>].is[==].to[<&gt>]> {
+      - define chatTag <def[returnChat].substring[2,<def[returnChat].length.sub[1]>]>
+      - inject locally ChatTag
+      - queue clear
+      }
+    - if <def[returnChat].is[==].to[<&lt>null<&gt>].not> narrate format:QuestNpcChatFormat %returnChat%
+  ChatTag:
+    - define chatTag <def[chatTag].split[<&sp>]>
+    - choose <def[chatTag].get[1]>:
+      - case shop:
+        - if <server.list_scripts.contains[s@dMerchant].not> {
+          - narrate format:QuestErrorFormat "This feature requires the dMerchant plugin to be installed"
+          - queue clear
+          }
+        - define shop <def[chatTag].get[2]>
+        - narrate format:QuestNpcChatFormat <proc[dMerchantEnterMessage].context[%shop%]||<&sp>>
+  ExitChat:
+    - flag player questInChatStep:!
+    - flag player QM_TEMP_ANS:!
+    - flag player questSetUp:!
+QuestNpcChatFormat:
+  type: format
+  format: <white><&lb><gold><npc.name><white><&rb><&co> <text.replace[<&lt>player<&gt>].with[<player.name>]>
+QuestPlayerChatFormat:
+  type: format
+  format: <white><&lb><gold><player.name><white><&rb> -<&gt> <white><&lb><gold><npc.name><white><&rb><&co> <text>
+QuestErrorFormat:
+  type: format
+  format: <bold><red>ERROR<&r><black><&co> <red><text>
+
+CreatQuestBook:
+  type: task
+  script:
+    - define player %1%
+    - define id 'questlog_<def[player].uuid>'
+    - define pages 'li@'
+    - foreach <yaml[%id%].list_keys[activequests]||li@> {
+      - define quest %value%
+      - define from <yaml[%id%].read[activequests.%quest%.gotfrom]>
+      - define from <def[from].name>
+      - define page li@<proc[BookText].context[%quest%<&nl><&sp><&sp>From<&co><&sp>%from%<&nl><&sp><&sp>progress<&co><&nl>]>
+      - foreach <yaml[%id%].list_keys[activequests.%quest%.objects]> {
+        - define progress <yaml[%id%].read[activequests.%quest%.objects.%value%]>
+        - define total <yaml[%id%].read[activequests.%quest%.total.%value%]>
+        - define page <def[page].include[<proc[BookText].context[<&sp><&sp><&sp><&sp>%value%<&co><&sp><def[total].sub[%progress%].round_down>/<def[total].round_down>]>]>
+        }
+      - define page <proc[CreatePage].context[<def[page].escaped>]>
+      - define pages <def[pages].include[%page%]>
+      }
+    - execute as_server 'give <def[player].name> <proc[CreateBook].context[<def[pages].escaped>|Quest Book|Bob]>' silent

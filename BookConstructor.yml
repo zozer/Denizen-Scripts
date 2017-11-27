@@ -1,0 +1,44 @@
+CreateBook:
+  type: procedure
+  definitions: pages|title|author
+  script:
+    - define pages <def[pages].unescaped>
+    - determine 'written_book 1 0 <&lc>pages<&co><&lb><def[pages].separated_by[<&cm>]><&rb><&cm><proc[BookTitle].context[%title%]><&cm><proc[BookAuthor].context[%author%]><&rc>'
+CreatePage:
+  type: procedure
+  definitions: textBlocks
+  script:
+    - define textBlocks <def[textBlocks].unescaped>
+    - define textBlocks <def[textBlocks].parse[split[].remove[first].remove[last].separated_by[]]>
+    - determine <&dq><&lb><&bs><&dq><&bs><&dq><&cm><def[textBlocks].separated_by[<&cm>]><&rb><&dq>
+BookChangePageEvent:
+  type: procedure
+  definitions: message|page
+  script:
+    - determine <&dq><&lc><&bs><&dq>text<&bs><&dq><&co><&bs><&dq>%message%<&bs><&dq><&cm><&bs><&dq>clickEvent<&bs><&dq><&co><&lc><&bs><&dq>action<&bs><&dq><&co><&bs><&dq>change_page<&bs><&dq><&cm><&bs><&dq>value<&bs><&dq><&co>%page%<&rc><&rc><&dq>
+BookRunCommandEvent:
+  type: procedure
+  definitions: message|command
+  script:
+    - determine <&dq><&lc><&bs><&dq>text<&bs><&dq><&co><&bs><&dq>%message%<&bs><&dq><&cm><&bs><&dq>clickEvent<&bs><&dq><&co><&lc><&bs><&dq>action<&bs><&dq><&co><&bs><&dq>run_command<&bs><&dq><&cm><&bs><&dq>value<&bs><&dq><&co><&bs><&dq>%command%<&bs><&dq><&rc><&rc><&dq>
+BookHoverEvent:
+  type: procedure
+  definitions: message|hover
+  script:
+    - determine <&dq><&lc><&bs><&dq>text<&bs><&dq><&co><&bs><&dq>%message%<&bs><&dq><&cm><&bs><&dq>hoverEvent<&bs><&dq><&co><&lc><&bs><&dq>action<&bs><&dq><&co><&bs><&dq>show_text<&bs><&dq><&cm><&bs><&dq>value<&bs><&dq><&co><&bs><&dq>%hover%<&bs><&dq><&rc><&rc><&dq> 
+BookText:
+  type: procedure
+  definitions: message
+  script:
+    - define message <def[message].replace[<&nl>].with[<&bs><&bs><&bs><&bs>n]>
+    - determine <&dq><&lc><&bs><&dq>text<&bs><&dq><&co><&bs><&dq>%message%<&bs><&dq><&rc><&dq>
+BookAuthor:
+  type: procedure
+  definitions: author
+  script:
+    - determine author<&co><&dq>%author%<&dq>
+BookTitle:
+  type: procedure
+  definitions: title
+  script:
+    - determine title<&co><&dq>%title%<&dq>
